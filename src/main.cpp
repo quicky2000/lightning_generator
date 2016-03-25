@@ -18,12 +18,25 @@
 #include "quicky_exception.h"
 #include "parameter_manager.h"
 #include <thread>
+#include <atomic>
 #include <iostream>
 #include <chrono>
 #include <cmath>
 #include <random>
 
 using namespace parameter_manager;
+
+//------------------------------------------------------------------------------
+void periodic_refresh(const std::atomic<bool> & p_stop,simple_gui::simple_gui & p_gui)
+{
+  std::cout << "Create refresh thread" << std::endl ;
+  while(!static_cast<bool>(p_stop))
+    {
+      p_gui.refresh();
+      std::chrono::milliseconds l_delay(33);
+      std::this_thread::sleep_for(l_delay);
+    }
+}
 
 //------------------------------------------------------------------------------
 int main(int argc,char ** argv)
@@ -83,6 +96,9 @@ int main(int argc,char ** argv)
       std::uniform_int_distribution<int> l_uniform_dist(0, 7);
       std::seed_seq seed2{l_random_device(), l_random_device(), l_random_device(), l_random_device(), l_random_device(), l_random_device(), l_random_device(), l_random_device()}; 
       std::mt19937 l_random_engine(seed2);
+
+      std::atomic<bool> l_stop(false);
+      std::thread l_refresh_thread(periodic_refresh,std::ref(l_stop),std::ref(l_gui));
 
       unsigned int l_dist[8] = {0,0,0,0,0,0,0,0};
       bool l_stuck = false;
@@ -144,20 +160,23 @@ int main(int argc,char ** argv)
 	  else if(l_x != l_center_x || l_y != l_center_y)
 	    {
 	      l_gui.set_pixel(l_x,l_y,l_fg_color_code);
-	      l_gui.refresh();
+	      //l_gui.refresh();
 	      l_stuck = false;
 	      l_x = l_center_x;
 	      l_y = l_center_y;
 	    }
 	}
 
-      for(unsigned int l_index = 0 ; l_index < 8 ; ++l_index)
-	{
-	  std::cout << "[" << l_index << "] : " << l_dist[l_index] << std::endl ; 
-	}
+      std::cout << "Ask to stop" << std::endl ;
+      l_stop.store(true,std::memory_order_relaxed);
 
+      std::cout << "Join refresh thread" << std::endl ;
+      l_refresh_thread.join();
+
+      l_gui.refresh();
       std::cout << "Finished" << std::endl ;
       std::this_thread::sleep_for(std::chrono::duration<int>(3));
+      getchar();
     }
   catch(quicky_exception::quicky_runtime_exception & e)
     {
