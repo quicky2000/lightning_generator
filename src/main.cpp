@@ -14,29 +14,16 @@
       You should have received a copy of the GNU General Public License
       along with this program.  If not, see <http://www.gnu.org/licenses/>
 */
-#include "simple_gui.h"
+#include "auto_refresh_gui.h"
 #include "quicky_exception.h"
 #include "parameter_manager.h"
 #include <thread>
-#include <atomic>
 #include <iostream>
 #include <chrono>
 #include <cmath>
 #include <random>
 
 using namespace parameter_manager;
-
-//------------------------------------------------------------------------------
-void periodic_refresh(const std::atomic<bool> & p_stop,simple_gui::simple_gui & p_gui)
-{
-  std::cout << "Create refresh thread" << std::endl ;
-  while(!static_cast<bool>(p_stop))
-    {
-      p_gui.refresh();
-      std::chrono::milliseconds l_delay(33);
-      std::this_thread::sleep_for(l_delay);
-    }
-}
 
 //------------------------------------------------------------------------------
 int main(int argc,char ** argv)
@@ -57,7 +44,7 @@ int main(int argc,char ** argv)
 	  ++l_size;
 	}
 
-      simple_gui::simple_gui l_gui;
+      simple_gui::auto_refresh_gui l_gui;
       l_gui.create_window(l_size,l_size);
 
       unsigned int l_center_x = (l_size - 1) / 2;
@@ -88,6 +75,8 @@ int main(int argc,char ** argv)
       l_gui.refresh();
       std::this_thread::sleep_for(std::chrono::duration<int>(3));
 
+      l_gui.start_refresh(std::chrono::milliseconds(33));
+
       unsigned int l_x = l_center_x;
       unsigned int l_y = l_center_y;
 
@@ -96,9 +85,6 @@ int main(int argc,char ** argv)
       std::uniform_int_distribution<int> l_uniform_dist(0, 7);
       std::seed_seq seed2{l_random_device(), l_random_device(), l_random_device(), l_random_device(), l_random_device(), l_random_device(), l_random_device(), l_random_device()}; 
       std::mt19937 l_random_engine(seed2);
-
-      std::atomic<bool> l_stop(false);
-      std::thread l_refresh_thread(periodic_refresh,std::ref(l_stop),std::ref(l_gui));
 
       unsigned int l_dist[8] = {0,0,0,0,0,0,0,0};
       bool l_stuck = false;
@@ -114,12 +100,25 @@ int main(int argc,char ** argv)
 		       l_fg_color_code == l_gui.get_pixel(l_x + 1 ,l_y + 1)
 		       );
 
-	  //	  l_gui.set_pixel(l_x,l_y,l_fg_color_code);
-	  //	  l_gui.refresh();
+#if 0
+	  SDL_Event l_event;
+	  while(SDL_PollEvent(&l_event))
+	    {
+	      switch(l_event.type)
+		{
+		case SDL_QUIT:
+		  l_stuck = true;
+		  break;
+		}
+	    }
+
+	  if(l_stuck)
+	    {
+	      break;
+	    }
+#endif
 	  if(!l_stuck)
 	    {
-	      //	      l_gui.set_pixel(l_x,l_y,l_bg_color_code);
-	      //	      l_gui.refresh();
 	      // Choose a random mean between 0 and 7
 	      int l_rand = l_uniform_dist(l_random_engine);
 	      ++l_dist[l_rand];
@@ -160,18 +159,13 @@ int main(int argc,char ** argv)
 	  else if(l_x != l_center_x || l_y != l_center_y)
 	    {
 	      l_gui.set_pixel(l_x,l_y,l_fg_color_code);
-	      //l_gui.refresh();
 	      l_stuck = false;
 	      l_x = l_center_x;
 	      l_y = l_center_y;
 	    }
 	}
 
-      std::cout << "Ask to stop" << std::endl ;
-      l_stop.store(true,std::memory_order_relaxed);
-
-      std::cout << "Join refresh thread" << std::endl ;
-      l_refresh_thread.join();
+      l_gui.stop_refresh();
 
       l_gui.refresh();
       std::cout << "Finished" << std::endl ;
